@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Author</title>
+    <style>
+        table {
+            font-family: arial, sans-serif;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td, th {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #dddddd;
+        }
+    </style>
+</head>
+<body>
+<h1>Author Details</h1>
+<span th:if="${author==null}">Author not found</span>
+<span th:unless="${author==null}">
+<table>
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>Full Name</th>
+    </tr>
+    </thead>
+    <tr>
+        <td th:text="${author.id}"></td>
+        <td th:text="${author.fullName}"></td>
+    </tr>
+</table>
+    </span>
+</body>
+</html>
