@@ -24,7 +24,7 @@ services:
   app:
     build:
       context: ./LibraryProject2
-      dockerfile: Dockerfile
+      dockerfile: app.dockerfile
     container_name: library-app
     ports:
       - "8080:8080"
