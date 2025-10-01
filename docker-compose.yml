@@ -11,11 +11,11 @@ services:
       MYSQL_PASSWORD: libpass
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./ProjectLibrary2/library.sql:/docker-entrypoint-initdb.d/library.sql:ro
+      - ./library.sql:/docker-entrypoint-initdb.d/library.sql:ro
     networks:
       - library-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "-plibpass"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-plibpass"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,7 +23,7 @@ services:
 
   app:
     build:
-      context: ./ProjectLibrary2
+      context: ./LibraryProject2
       dockerfile: Dockerfile
     container_name: library-app
     ports:
