@@ -1,0 +1,66 @@
+#!/bin/bash
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+# variables - change as needed
+DB_ROOT_PASS="libpass"
+DB_NAME="library"
+DB_USER="libraryuser"
+DB_USER_PASS="libpass"
+APP_VM_ALLOWED_NET="0.0.0.0/0"   # restrict in production
+
+# update system
+apt update -y && apt upgrade -y
+
+# install MySQL
+apt install -y mysql-server git
+
+# ensure git is up to date
+apt install --only-upgrade -y git
+
+# ensure mysql service is enabled and started
+systemctl enable mysql
+systemctl start mysql
+
+# secure root user & create a dedicated DB user & database
+# set root password and authentication plugin to mysql_native_password
+mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASS}'; FLUSH PRIVILEGES;"
+
+# create database and user
+mysql --user=root --password="${DB_ROOT_PASS}" --execute="
+CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_USER_PASS}';
+GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'%';
+FLUSH PRIVILEGES;
+"
+
+# import initial schema/data if library.sql found in repo
+cd /tmp
+if [ -d /home/ubuntu/ProjectLibrary2 ] || git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git /tmp/ProjectLibrary2; then
+  # Check for library.sql in multiple possible locations
+  if [ -f /tmp/ProjectLibrary2/library.sql ]; then
+    echo "Found library.sql in repo root, importing..."
+    mysql --user=root --password="${DB_ROOT_PASS}" "${DB_NAME}" < /tmp/ProjectLibrary2/library.sql || true
+  elif [ -f /tmp/ProjectLibrary2/LibraryProject2/src/main/resources/library.sql ]; then
+    echo "Found library.sql in LibraryProject2/src/main/resources/, importing..."
+    mysql --user=root --password="${DB_ROOT_PASS}" "${DB_NAME}" < /tmp/ProjectLibrary2/LibraryProject2/src/main/resources/library.sql || true
+  elif [ -f /tmp/ProjectLibrary2/src/main/resources/library.sql ]; then
+    echo "Found library.sql in src/main/resources/, importing..."
+    mysql --user=root --password="${DB_ROOT_PASS}" "${DB_NAME}" < /tmp/ProjectLibrary2/src/main/resources/library.sql || true
+  else
+    echo "No library.sql found in repo - checked repo root, src/main/resources/, and LibraryProject2/src/main/resources/"
+  fi
+fi
+
+# allow remote connections (bind to all interfaces) - careful with exposure
+sed -i "s/^bind-address.*/bind-address = 0.0.0.0/" /etc/mysql/mysql.conf.d/mysqld.cnf
+
+# restart mysql to apply changes
+systemctl restart mysql
+
+# open firewall port if ufw installed (optional)
+if command -v ufw >/dev/null 2>&1; then
+  ufw allow 3306/tcp
+fi
+
+echo "MySQL setup complete. DB: ${DB_NAME}, user: ${DB_USER}"

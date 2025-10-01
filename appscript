@@ -1,0 +1,69 @@
+#!/bin/bash
+set -euo pipefail
+
+# variables - change to the DB VM IP or hostname
+DB_HOST="172.31.44.119"        # <-- replace with your DB VM's private IP or DNS
+DB_PORT=3306
+DB_NAME="library"
+DB_USER="libraryuser"
+DB_PASS="libpass"
+APP_PORT=8080
+
+# update & install
+apt update -y && apt upgrade -y
+apt install -y openjdk-17-jdk maven git curl
+
+# ensure git is up to date
+apt install --only-upgrade -y git
+
+# create user and workdir
+useradd -m -s /bin/bash springapp || true
+cd /home/springapp
+chown springapp:springapp /home/springapp
+
+# clone repo (replace with your private repo or use a deploy key)
+su - springapp -c "git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2 || (cd ProjectLibrary2 && git pull)"
+
+# build the app (skip tests to speed up)
+cd /home/springapp/ProjectLibrary2/LibraryProject2
+su - springapp -c "cd /home/springapp/ProjectLibrary2/LibraryProject2 && mvn -DskipTests package"
+
+# find the built jar (assumes typical Spring Boot maven location)
+JAR_PATH=$(ls /home/springapp/ProjectLibrary2/LibraryProject2/target/*-SNAPSHOT.jar 2>/dev/null || ls /home/springapp/ProjectLibrary2/LibraryProject2/target/*.jar | head -n1)
+if [ -z "$JAR_PATH" ]; then
+  echo "ERROR: built jar not found. Check 'mvn package' output." >&2
+  exit 1
+fi
+
+# create application.properties override (or set env variables). Using env vars here:
+cat > /etc/systemd/system/library-app.service <<EOF
+[Unit]
+Description=Library Spring Boot App
+After=network.target
+
+[Service]
+User=springapp
+Environment=SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+Environment=SPRING_DATASOURCE_USERNAME=${DB_USER}
+Environment=SPRING_DATASOURCE_PASSWORD=${DB_PASS}
+Environment=SERVER_PORT=${APP_PORT}
+ExecStart=/usr/bin/java -jar ${JAR_PATH} --spring.datasource.url=\${SPRING_DATASOURCE_URL} --spring.datasource.username=\${SPRING_DATASOURCE_USERNAME} --spring.datasource.password=\${SPRING_DATASOURCE_PASSWORD} --server.port=\${SERVER_PORT}
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# reload systemd and start the app
+systemctl daemon-reload
+systemctl enable library-app
+systemctl start library-app
+
+# allow firewall port if ufw installed
+if command -v ufw >/dev/null 2>&1; then
+  ufw allow ${APP_PORT}/tcp
+fi
+
+echo "App VM setup complete. App should be reachable on port ${APP_PORT}."
