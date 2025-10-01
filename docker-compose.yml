@@ -1,4 +1,4 @@
-version: "3.8"
+version: '3.8'
 
 services:
   mysql:
@@ -10,26 +10,38 @@ services:
       MYSQL_USER: libraryuser
       MYSQL_PASSWORD: libpass
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./library.sql:/docker-entrypoint-initdb.d/library.sql
-    ports:
-      - "3306:3306"
+      - mysql-data:/var/lib/mysql
+      - ./ProjectLibrary2/library.sql:/docker-entrypoint-initdb.d/library.sql:ro
+    networks:
+      - library-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "-plibpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   app:
     build:
-      context: .
+      context: ./ProjectLibrary2
       dockerfile: Dockerfile
     container_name: library-app
-    depends_on:
-      - mysql
+    ports:
+      - "8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/library
       SPRING_DATASOURCE_USERNAME: libraryuser
       SPRING_DATASOURCE_PASSWORD: libpass
-      SERVER_PORT: 8080
-    ports:
-      - "8080:8080"
-    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - library-network
+    restart: unless-stopped
+
+networks:
+  library-network:
+    driver: bridge
 
 volumes:
-  mysql_data:
+  mysql-data:
