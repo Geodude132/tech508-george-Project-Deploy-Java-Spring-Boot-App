@@ -14,7 +14,6 @@ kind: Deployment
 metadata:
   name: mysql
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: mysql
@@ -24,26 +23,26 @@ spec:
         app: mysql
     spec:
       containers:
-        - name: mysql
-          image: mysql:8.0
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              value: libpass
-            - name: MYSQL_DATABASE
-              value: library
-            - name: MYSQL_USER
-              value: libraryuser
-            - name: MYSQL_PASSWORD
-              value: libpass
-          ports:
-            - containerPort: 3306
-          volumeMounts:
-            - name: mysql-storage
-              mountPath: /var/lib/mysql
-      volumes:
+      - name: mysql
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: rootpassword
+        - name: MYSQL_DATABASE
+          value: library
+        - name: MYSQL_USER
+          value: libuser
+        - name: MYSQL_PASSWORD
+          value: libpass
+        ports:
+        - containerPort: 3306
+        volumeMounts:
         - name: mysql-storage
-          persistentVolumeClaim:
-            claimName: mysql-pvc
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-storage
+        persistentVolumeClaim:
+          claimName: mysql-pvc
 ---
 apiVersion: v1
 kind: Service

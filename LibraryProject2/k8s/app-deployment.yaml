@@ -13,14 +13,14 @@ spec:
         app: library-app
     spec:
       containers:
-        - name: library-app
-          image: projectlibrary2-app:latest  # update if pushing to DockerHub
-          ports:
-            - containerPort: 8080
-          env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:mysql://mysql:3306/library
-            - name: SPRING_DATASOURCE_USERNAME
-              value: libraryuser
-            - name: SPRING_DATASOURCE_PASSWORD
-              value: libpass
+      - name: library-app
+        image: geodude132/projectlibrary2-app:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:mysql://mysql:3306/library
+        - name: SPRING_DATASOURCE_USERNAME
+          value: libuser
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: libpass
