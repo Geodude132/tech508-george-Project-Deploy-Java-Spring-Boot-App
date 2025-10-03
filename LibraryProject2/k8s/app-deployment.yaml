@@ -50,20 +50,18 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /actuator/health   # Spring Boot health endpoint
+            path: /actuator/health
             port: 8080
-          initialDelaySeconds: 90    # allow app more startup time
-          periodSeconds: 15
+          initialDelaySeconds: 60
+          periodSeconds: 10
           timeoutSeconds: 5
-          failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /actuator/health
             port: 8080
-          initialDelaySeconds: 45
-          periodSeconds: 10
+          initialDelaySeconds: 30
+          periodSeconds: 5
           timeoutSeconds: 5
-          failureThreshold: 3
 
 ---
 apiVersion: v1
