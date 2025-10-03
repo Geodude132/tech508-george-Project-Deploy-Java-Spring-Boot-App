@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cloud-init User Data script to deploy Spring Boot app and MySQL via Minikube
+# Cloud-init User Data script to deploy Spring Boot app and MySQL via Minikube on a fresh VM
 
 # Log everything
 exec > >(tee -a /var/log/k8s-setup.log)
@@ -7,11 +7,11 @@ exec 2>&1
 
 echo "=== Starting Kubernetes deployment at $(date) ==="
 
-# Update and install dependencies
+# Update packages and install dependencies
 apt update -y
 apt install -y docker.io git conntrack curl build-essential
 
-# Enable Docker for ubuntu user
+# Enable and start Docker
 systemctl enable docker
 systemctl start docker
 usermod -aG docker ubuntu
@@ -32,17 +32,14 @@ chmod +x /usr/local/bin/minikube
 
 # Clean up Docker to free space
 docker system prune -af || true
+docker volume prune -f || true
 
-# Remove any existing Minikube cluster
+# Ensure no existing Minikube cluster
 sudo -u ubuntu minikube delete || true
 
-# Clone or update repository
+# Clone the project repository
 cd /home/ubuntu
-if [ -d "ProjectLibrary2" ]; then
-    sudo -u ubuntu git -C ProjectLibrary2 pull
-else
-    sudo -u ubuntu git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2
-fi
+sudo -u ubuntu git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2
 chown -R ubuntu:ubuntu ProjectLibrary2
 
 # Verify k8s manifest files exist
@@ -53,28 +50,40 @@ for f in mysql-deployment.yaml app-deployment.yaml; do
     fi
 done
 
-# Start Minikube with safe memory for VM (~3GB)
-sudo -u ubuntu minikube start --driver=docker --cpus=2 --memory=3072 --disk-size=20g --wait=all
+# Determine available disk space for Minikube
+AVAILABLE_DISK=$(df --output=avail / | tail -1)
+# Use ~70% of available space for Minikube disk
+DISK_SIZE_MB=$((AVAILABLE_DISK * 70 / 1000))
+if [ $DISK_SIZE_MB -lt 20000 ]; then
+    DISK_SIZE_MB=20000
+fi
+DISK_SIZE="${DISK_SIZE_MB}mb"
+
+# Start Minikube with safe memory and disk for a small VM
+sudo -u ubuntu minikube start \
+  --driver=docker \
+  --cpus=2 \
+  --memory=3072 \
+  --disk-size=$DISK_SIZE \
+  --wait=all
 
 # Configure Docker to use Minikube environment
 eval $(sudo -u ubuntu minikube docker-env)
 
-# Build Docker image inside Minikube using app.dockerfile
-sudo -u ubuntu docker build -f /home/ubuntu/ProjectLibrary2/LibraryProject2/app.dockerfile -t projectlibrary2-app:latest /home/ubuntu/ProjectLibrary2/LibraryProject2
+# Build Docker image inside Minikube
+sudo -u ubuntu docker build -f /home/ubuntu/ProjectLibrary2/LibraryProject2/app.dockerfile \
+  -t projectlibrary2-app:latest /home/ubuntu/ProjectLibrary2/LibraryProject2
 
 # Deploy MySQL
 sudo -u ubuntu kubectl apply -f /home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/mysql-deployment.yaml
 
-# Wait for MySQL pod to be ready (timeout 2 minutes)
-sudo -u ubuntu kubectl wait --for=condition=ready pod -l app=mysql --timeout=120s
+# Wait for MySQL pod to be ready (longer timeout for first run)
+sudo -u ubuntu kubectl wait --for=condition=ready pod -l app=mysql --timeout=600s
 
 # Deploy Spring Boot application
 sudo -u ubuntu kubectl apply -f /home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/app-deployment.yaml
 
 # Ensure the app deployment uses the latest image
 sudo -u ubuntu kubectl rollout restart deployment/library-app
-
-# Optional: forward port 8080 in the background so you can access it from the VM
-sudo -u ubuntu kubectl port-forward svc/library-service 8080:8080 &
 
 echo "=== Kubernetes deployment finished at $(date) ==="

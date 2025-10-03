@@ -14,14 +14,22 @@ spec:
       labels:
         app: library-app
     spec:
+      restartPolicy: Always
       initContainers:
       - name: wait-for-mysql
         image: busybox:1.35
-        command: ['sh', '-c', 'until nc -z mysql 3306; do echo waiting for mysql; sleep 2; done;']
+        command:
+          - sh
+          - -c
+          - |
+            until nc -z mysql 3306; do
+              echo "waiting for mysql..."
+              sleep 5
+            done
       containers:
       - name: library-app
         image: geodude132/projectlibrary2-app:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http
@@ -45,7 +53,7 @@ spec:
           httpGet:
             path: /
             port: 8080
-          initialDelaySeconds: 60
+          initialDelaySeconds: 90
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
@@ -53,7 +61,7 @@ spec:
           httpGet:
             path: /
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 5
           timeoutSeconds: 5
           failureThreshold: 3
@@ -72,4 +80,4 @@ spec:
   - protocol: TCP
     port: 8080
     targetPort: 8080
-    # nodePort omitted so Kubernetes assigns a random port
+    nodePort: 5000

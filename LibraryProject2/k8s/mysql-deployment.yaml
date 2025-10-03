@@ -7,7 +7,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 1Gi
+      storage: 5Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -55,7 +55,7 @@ spec:
             - -u
             - root
             - -prootpassword
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
           timeoutSeconds: 5
         readinessProbe:
@@ -68,7 +68,7 @@ spec:
             - -u
             - root
             - -prootpassword
-          initialDelaySeconds: 10
+          initialDelaySeconds: 45
           periodSeconds: 5
           timeoutSeconds: 5
       volumes:
