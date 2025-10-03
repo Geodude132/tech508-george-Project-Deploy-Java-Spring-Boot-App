@@ -16,7 +16,7 @@ systemctl enable docker
 systemctl start docker
 usermod -aG docker ubuntu
 
-# Refresh Docker group membership
+# Refresh Docker group membership for current session
 newgrp docker <<'EOF'
 echo "=== Docker group refreshed ==="
 EOF
@@ -34,15 +34,19 @@ chmod +x /usr/local/bin/minikube
 docker system prune -af || true
 docker volume prune -f || true
 
-# Ensure no existing Minikube cluster
+# Delete any existing Minikube cluster
 sudo -u ubuntu minikube delete || true
 
-# Clone the project repository
+# Clone or update project repository
 cd /home/ubuntu
-sudo -u ubuntu git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2
+if [ -d "ProjectLibrary2" ]; then
+    sudo -u ubuntu git -C ProjectLibrary2 pull
+else
+    sudo -u ubuntu git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2
+fi
 chown -R ubuntu:ubuntu ProjectLibrary2
 
-# Verify k8s manifest files exist
+# Verify Kubernetes manifest files exist
 for f in mysql-deployment.yaml app-deployment.yaml; do
     if [ ! -f "/home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/$f" ]; then
         echo "ERROR: $f not found!"
@@ -50,16 +54,13 @@ for f in mysql-deployment.yaml app-deployment.yaml; do
     fi
 done
 
-# Determine available disk space for Minikube
+# Determine available disk space for Minikube (~70%, min 20GB)
 AVAILABLE_DISK=$(df --output=avail / | tail -1)
-# Use ~70% of available space for Minikube disk
 DISK_SIZE_MB=$((AVAILABLE_DISK * 70 / 1000))
-if [ $DISK_SIZE_MB -lt 20000 ]; then
-    DISK_SIZE_MB=20000
-fi
+[ $DISK_SIZE_MB -lt 20000 ] && DISK_SIZE_MB=20000
 DISK_SIZE="${DISK_SIZE_MB}mb"
 
-# Start Minikube with safe memory and disk for a small VM
+# Start Minikube with sufficient resources
 sudo -u ubuntu minikube start \
   --driver=docker \
   --cpus=2 \
@@ -77,7 +78,7 @@ sudo -u ubuntu docker build -f /home/ubuntu/ProjectLibrary2/LibraryProject2/app.
 # Deploy MySQL
 sudo -u ubuntu kubectl apply -f /home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/mysql-deployment.yaml
 
-# Wait for MySQL pod to be ready (longer timeout for first run)
+# Wait for MySQL pod to be ready
 sudo -u ubuntu kubectl wait --for=condition=ready pod -l app=mysql --timeout=600s
 
 # Deploy Spring Boot application
@@ -86,4 +87,8 @@ sudo -u ubuntu kubectl apply -f /home/ubuntu/ProjectLibrary2/LibraryProject2/k8s
 # Ensure the app deployment uses the latest image
 sudo -u ubuntu kubectl rollout restart deployment/library-app
 
+# Patch the NodePort service to use a valid port (e.g., 30500)
+sudo -u ubuntu kubectl patch svc library-service -p '{"spec":{"ports":[{"port":8080,"targetPort":8080,"nodePort":30500}],"type":"NodePort"}}'
+
 echo "=== Kubernetes deployment finished at $(date) ==="
+echo "You can access the Spring Boot app at: http://<VM_PUBLIC_IP>:30500"
