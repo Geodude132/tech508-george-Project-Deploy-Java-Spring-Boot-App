@@ -1,36 +1,80 @@
 #!/bin/bash
-set -euo pipefail
+# Cloud-init User Data script to deploy Spring Boot app and MySQL via Minikube
 
-apt update -y && apt upgrade -y
-apt install -y curl apt-transport-https docker.io conntrack git
+# Log everything
+exec > >(tee -a /var/log/k8s-setup.log)
+exec 2>&1
+
+echo "=== Starting Kubernetes deployment at $(date) ==="
+
+# Update and install dependencies
+apt update -y
+apt install -y docker.io git conntrack curl build-essential
+
+# Enable Docker for ubuntu user
+systemctl enable docker
+systemctl start docker
+usermod -aG docker ubuntu
+
+# Refresh Docker group membership
+newgrp docker <<'EOF'
+echo "=== Docker group refreshed ==="
+EOF
 
 # Install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl
-sudo install kubectl /usr/local/bin/kubectl
+KUBECTL_VERSION="v1.29.6"
+curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+chmod +x /usr/local/bin/kubectl
 
 # Install Minikube
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-chmod +x minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
+curl -Lo /usr/local/bin/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+chmod +x /usr/local/bin/minikube
 
-# Ensure /usr/local/bin is in PATH
-export PATH=$PATH:/usr/local/bin
+# Clean up Docker to free space
+docker system prune -af || true
 
-# Clone repo
+# Remove any existing Minikube cluster
+sudo -u ubuntu minikube delete || true
+
+# Clone or update repository
 cd /home/ubuntu
-if [ ! -d ProjectLibrary2 ]; then
-  git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2
+if [ -d "ProjectLibrary2" ]; then
+    sudo -u ubuntu git -C ProjectLibrary2 pull
+else
+    sudo -u ubuntu git clone https://github.com/Geodude132/tech508-george-Project-Deploy-Java-Spring-Boot-App.git ProjectLibrary2
 fi
-cd ProjectLibrary2/k8s
+chown -R ubuntu:ubuntu ProjectLibrary2
 
-# Start Minikube
-sudo minikube start --driver=docker --force
+# Verify k8s manifest files exist
+for f in mysql-deployment.yaml app-deployment.yaml; do
+    if [ ! -f "/home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/$f" ]; then
+        echo "ERROR: $f not found!"
+        exit 1
+    fi
+done
 
-# Wait for Minikube to be ready
-sudo kubectl wait --for=condition=ready pod --all --timeout=180s || true
+# Start Minikube with safe memory for VM (~3GB)
+sudo -u ubuntu minikube start --driver=docker --cpus=2 --memory=3072 --disk-size=20g --wait=all
 
-# Apply manifests
-sudo kubectl apply -f mysql-deployment.yaml
-sudo kubectl apply -f app-deployment.yaml
-sudo kubectl apply -f app-service.yaml
+# Configure Docker to use Minikube environment
+eval $(sudo -u ubuntu minikube docker-env)
+
+# Build Docker image inside Minikube using app.dockerfile
+sudo -u ubuntu docker build -f /home/ubuntu/ProjectLibrary2/LibraryProject2/app.dockerfile -t projectlibrary2-app:latest /home/ubuntu/ProjectLibrary2/LibraryProject2
+
+# Deploy MySQL
+sudo -u ubuntu kubectl apply -f /home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/mysql-deployment.yaml
+
+# Wait for MySQL pod to be ready (timeout 2 minutes)
+sudo -u ubuntu kubectl wait --for=condition=ready pod -l app=mysql --timeout=120s
+
+# Deploy Spring Boot application
+sudo -u ubuntu kubectl apply -f /home/ubuntu/ProjectLibrary2/LibraryProject2/k8s/app-deployment.yaml
+
+# Ensure the app deployment uses the latest image
+sudo -u ubuntu kubectl rollout restart deployment/library-app
+
+# Optional: forward port 8080 in the background so you can access it from the VM
+sudo -u ubuntu kubectl port-forward svc/library-service 8080:8080 &
+
+echo "=== Kubernetes deployment finished at $(date) ==="
